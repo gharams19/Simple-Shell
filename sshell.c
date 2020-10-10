@@ -36,7 +36,7 @@ void execute_builtin_commands(char* cmd){
         fprintf(stdout, "%s\n", cwd);
         
     }
-    else if(strcmp(cmd,"exit") == 0) {
+    else if(strstr(cmd,"exit") != NULL) {
         fprintf(stderr, "Bye...\n");
         exit(0);
     }
@@ -46,7 +46,7 @@ void execute_builtin_commands(char* cmd){
             perror("cd failed");
         };
     }
-    else if(strcmp(cmd,"sls") == 0) {
+    else if(strstr(cmd,"sls") != NULL) {
         DIR *dirp;
         struct dirent *dp;
 
@@ -90,7 +90,7 @@ int main(void)
                         fprintf(stderr, "Bye...\n");
                         break;
                 }
-                if(strcmp(cmd, "pwd") || strcmp(cmd, "exit")) {
+                if(strstr(cmd,"cd") != NULL || strstr(cmd,"pwd") != NULL || strstr(cmd,"sls") != NULL || strstr(cmd,"exit") != NULL){
                     execute_builtin_commands(cmd);
                     fprintf(stdout, "+ completed '%s' [0]\n", cmd);
                 }
