@@ -2,104 +2,143 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <dirent.h>
-#include <sys/stat.h>
-#define PATH_MAX        4096 
+#include <sys/wait.h>
+
 #define CMDLINE_MAX 512
+#define ARG_MAX 16
+#define PATH_MAX 4096 // Linux defines PATH_MAX 4096 bytes
+#define TOKEN_MAX 32
+
+void system_loop(void);
+char *allocate_cmd(void);
+char **cmd_parser(char *line);
+int execute(char **args);
+
+int system_call(char **args);
 
 
-char * get_path(char* cmd, int cmd_length) {
-    char path[PATH_MAX];
 
-    int j = 0;
-
-    for(unsigned long i = cmd_length; i < strlen(cmd); i++) {
-        if(cmd[i] != ' ') {
-            path[j] = cmd[i];
-            j++;
-        }
-    }
-    char* path_cmd = path;
-    return path_cmd;
+int main(int argc, char **argv)
+{       
+        system_loop();
+        return EXIT_SUCCESS;
 }
-void execute_builtin_commands(char* cmd){
-    char cwd[PATH_MAX];
-    
-    if(strstr(cmd,"pwd") != NULL) {
-        if(strlen(cmd) > 3) {
-            char* path = get_path(cmd,3);
-            if(chdir(path) != 0) {
-                perror("pwd failed");
-            };
-        }
-        getcwd(cwd, sizeof(cwd));
-        fprintf(stdout, "%s\n", cwd);
-        
-    }
-    else if(strcmp(cmd,"exit") == 0) {
-        fprintf(stderr, "Bye...\n");
-        exit(0);
-    }
-    else if(strstr(cmd,"cd") != NULL) {
-        char* path = get_path(cmd,2);
-        if(chdir(path) != 0) {
-            perror("cd failed");
-        };
-    }
-    else if(strcmp(cmd,"sls") == 0) {
-        DIR *dirp;
-        struct dirent *dp;
 
-        dirp = opendir(".");
-        while((dp = readdir(dirp)) != NULL) {
-            struct stat sb;
-            stat(dp->d_name, &sb);
-            fprintf(stdout, "%s (%lld bytes)\n", dp->d_name, sb.st_size);
-        }
-    }
+void system_loop(void){
+        char *line;
+        char **args;
+        int retval;
 
-}
-int main(void)
-{
-        char cmd[CMDLINE_MAX];
-
-        while (1) {
-                char *nl;
-                // int retval;
-
+        do {
                 /* Print prompt */
                 printf("sshell$ ");
                 fflush(stdout);
 
-                /* Get command line */
-                fgets(cmd, CMDLINE_MAX, stdin);
+                line = allocate_cmd();
+                args = cmd_parser(line);
+                retval = execute(args);
 
-                /* Print command line if stdin is not provided by terminal */
-                if (!isatty(STDIN_FILENO)) {
-                        printf("%s", cmd);
-                        fflush(stdout);
+                free(line);
+                free(args);                    
+      } while(retval);
+}
+
+// Reading cmd and allocate buffer block
+char *allocate_cmd(void){
+        int buffersize = CMDLINE_MAX;
+        char *buffer = malloc(sizeof(char) * buffersize);
+
+        if(!buffer){
+                fprintf(stderr, "allocation error\n");
+                exit(EXIT_FAILURE);
+        }
+
+        int character;
+        int position = 0;
+        while(1){
+                character = getchar();
+                if (character == '\n'){
+                        buffer[position] = '\0';
+                        return buffer;
+                } else{
+                        buffer[position] = character;
                 }
+                position++;
 
-                /* Remove trailing newline from command line */
-                nl = strchr(cmd, '\n');
-                if (nl)
-                        *nl = '\0';
-
-                /* Builtin command */
-                if (!strcmp(cmd, "exit")) {
-                        fprintf(stderr, "Bye...\n");
-                        break;
+                // Assumed max length of cmd line never exceeds 512 chars
+                if (position >= buffersize){
+                        fprintf(stderr, "buffer exceeded\n");
+                        exit(EXIT_FAILURE);
                 }
-                if(strcmp(cmd, "pwd") || strcmp(cmd, "exit")) {
-                    execute_builtin_commands(cmd);
-                    fprintf(stdout, "+ completed '%s' [0]\n", cmd);
-                }
+        }
+}
 
-                /* Regular command */
-                // retval = system(cmd);
-                // fprintf(stdout, "Return status value for '%s': %d\n",
-                //         cmd, retval);
+// Parsing the command line after buffer, memory allocation
+// result of parsing the cmd should be instance of data structure contains all the information - arguments
+char **cmd_parser(char *line){
+        int buffersize = TOKEN_MAX;
+        char **tokens = malloc(buffersize * sizeof(char*));
+        char *token;        
+
+        if(!tokens){
+                fprintf(stderr, "tokenization error\n");
+                exit(EXIT_FAILURE);
+        }
+
+        int position = 0;
+        token = strtok(line, " \t\r\n");
+        while (token != NULL){
+                tokens[position] = token;
+                position++;
+        }
+
+        tokens[position] = NULL;
+        return tokens;
+}
+/*
+static struct cmd_line{
+        const char w;
+        const char t;
+        const char r;
+        const char n;
+}
+
+my_cmd_line(struct cmd_line *obj, int b){
+        obj->a = b;
+}
+*/
+
+int execute(char **args){
+        if(args[0] == NULL)
+                return 1;
+        
+        // Check for the built in functions
+        //for(int i = 0; i <  )
+        //        
+
+        return system_call(args);
+}
+
+int system_call(char **args){
+        pid_t pid;
+
+        pid = fork();
+        if (pid == 0){
+                if(execvp(args[0], args) == -1)
+                        perror("execvp");
+                exit(1);
+                
+        } else if (pid < 0){
+                perror("fork");
+                exit(1);
+        } else{
+                int status;
+                waitpid(pid, &status, 0);
+                printf("Child returned %d\n", WEXITSTATUS(status));
         }
 
         return EXIT_SUCCESS;
 }
+
+
+
