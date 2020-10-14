@@ -129,7 +129,6 @@ void output_redirection(char* cmd) {
         char* args[]  = {path,"", NULL};
         pid_t pid = fork();
         if(pid == 0) {
-            printf("here child");
             execv(path,args);
         }
         else if(pid > 0) {
@@ -141,8 +140,8 @@ void output_redirection(char* cmd) {
             dup2(1, fileno(stdout));
 
             close(1);  
-            printf("%d", status);
-            return;
+            return EXIT_SUCCESS;
+
         }
         else{ 
             perror("Error: fork");
