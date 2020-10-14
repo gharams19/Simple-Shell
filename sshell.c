@@ -48,15 +48,21 @@ char *read_cmd(void){
 // parsing the cmd_line using string tokenization 
 // ---------------------------------------------- USE struct object 
 
-/* 
-#define delimiter = " \t\r\n\a";
-struct parser{
-        char *s_token;
-        char **token;
-        int buffer;
-        int offset;
-};
+/*
+#define delimiter = " \t\r\n";
 */
+struct parsed_token{
+        char **tokens;
+        char *tok;
+        //int length;
+        //int pointer;
+};
+// ---------------------
+
+void assign_token(struct parsed_token *p_tokens, char *p_tok){
+        p_tokens->tok=p_tok;
+}
+
 char **parse_cmd(char *cmd){
         // memory allocation
         char *s_token;
@@ -69,11 +75,21 @@ char **parse_cmd(char *cmd){
 
         // ref: https://www.tutorialspoint.com/c_standard_library/c_function_strtok.htm
         int pointer = 0;
-        s_token = strtok(cmd, " \t\r\n\a"); // common delimiter
+        //printf("debug1, %s\n",cmd);
+        s_token = strtok(cmd, " \t\r\n"); // common delimiter - escape character
+        struct parsed_token p_tokens;
         while(s_token != NULL){
+                // ---------------------
+                /*
+                printf("debug, %s\n", s_token);
+                assign_token(&p_tokens,s_token);
+                printf("debug2, %s\n",p_tokens.tok);
+                */
+                // ---------------------
+
                 token[pointer] = s_token;
                 pointer++;
-                s_token = strtok(NULL, " \t\r\n\a");
+                s_token = strtok(NULL, " \t\r\n");
         }
         token[pointer] = NULL;
         return token;
@@ -86,6 +102,8 @@ int execute_cmd(char **args){
         /* Builtin command */
         // for(unsigned long i = 0; i < 4; i++) pwd, cd, exit, sls
         // if (strcmp(args[0], builtin commands) == 0)
+        // char* built_cmds[4]
+        // built_cmds[0] = "exit" ...
         // execute built in - return 
         if (!strcmp(args[0], "exit")) {  // string compare, equal == 0
                 fprintf(stderr, "Bye...\n");
@@ -113,6 +131,8 @@ int execute_cmd(char **args){
         return EXIT_SUCCESS;
 }
 
+// pipe three arguments maximum
+//int execute_pipe(char* )
 //void execute_pipe(char **args1, char**args2){
 //
 //}
