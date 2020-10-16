@@ -42,24 +42,22 @@ int execute_pwd() {
     int ret_val = 0;
     if(getcwd(cwd, sizeof(cwd)) != NULL) {
         fprintf(stdout, "%s\n", cwd);
-        }
-    else {
+    } else {
         ret_val = 1;
-        perror("Error: pwd failed");
+        perror("Eroor: pwd failed");
     }
     return ret_val;   
 }
-
 int execute_builtin_commands(char** args, int cmd_num){
     int ret_val;
     switch(cmd_num) {
-        case 1:
+        case pwd_cmd:
             ret_val = execute_pwd();
             break;
-        case 2:
+        case cd_cmd:
             ret_val = execute_cd(args[1]);
             break;
-        case 3:
+        case sls_cmd:
            ret_val = execute_sls();
             break;
         default:
@@ -157,7 +155,6 @@ char **parse_cmd(char *cmd, int* size){ //struct parsed_token *p_tokens,
         *size = size_tokens;
         return token;
 }
-
 int execute_cmd(char **args){
     int built_cmd = -1;
         if(args[0] == NULL)
@@ -238,8 +235,7 @@ int output_redirection(char** args, int cmd_pos) {
         int std_out = dup(STDOUT_FILENO);
         if(dup2(fd, STDOUT_FILENO) == -1) {
                 perror("Error: Cannot redirect output");
-                ret = 1;
-                return ret;
+                return 1;
         }
         if(strstr(args[0],"./") != NULL) { //Check if executable isnt a regular command and find the path to it
                 char* cmd = args[0];
@@ -257,11 +253,11 @@ int output_redirection(char** args, int cmd_pos) {
                 int j = 0;
                 for(int l = 0; l < cmd_pos; l++) {
                         new_args[j] = args[l];
-                                j++;
+                        j++;
                 }
                 ret = execute_cmd(new_args);
         }
-        
+
         /* return everything to normal and free memory*/
         fflush(stdout); 
         dup2(std_out, STDOUT_FILENO);
