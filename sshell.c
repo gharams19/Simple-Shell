@@ -11,65 +11,62 @@
 #define PATH_MAX 4096 // Linux defines PATH_MAX 4096 bytes
 #define TOKEN_MAX 32
 
+enum { exit_cmd = 0, pwd_cmd = 1, cd_cmd = 2, sls_cmd = 3};
+
 int execute_cd(char * path) {
-    int ret;
-    ret = chdir(path);
-    if(ret != 0) {
+    int ret_val;
+    ret_val = chdir(path);
+    if(ret_val != 0) {
         perror("Error: cannot cd into directory");
-        ret = 1;
+        ret_val = 1;
     }
-    return ret;
+    return ret_val;
 }
 int execute_sls() {
-    int ret = 0;
+    int ret_val = 0;
     DIR *dirp;
     struct dirent *dp;
     dirp = opendir(".");
     if(dirp == NULL) {
-        ret = 1;
+        ret_val = 1;
     }
     while((dp = readdir(dirp)) != NULL) {
         struct stat sb;
         stat(dp->d_name, &sb);
         fprintf(stdout, "%s (%lld bytes)\n", dp->d_name, sb.st_size);
     }
-    return ret;
+    return ret_val;
 }
 int execute_pwd() {
     char cwd[PATH_MAX];
-    int ret = 0;
+    int ret_val = 0;
     if(getcwd(cwd, sizeof(cwd)) != NULL) {
         fprintf(stdout, "%s\n", cwd);
         }
     else {
-        ret = 1;
+        ret_val = 1;
         perror("Error: pwd failed");
     }
-    return ret;   
+    return ret_val;   
 }
 
 int execute_builtin_commands(char** args, int cmd_num){
-    int ret;
-    switch(cmd_num){
-        case 0:
-            fprintf(stderr, "Bye...\n");
-            ret = 0;
-            break;
+    int ret_val;
+    switch(cmd_num) {
         case 1:
-            ret = execute_pwd();
+            ret_val = execute_pwd();
             break;
         case 2:
-            ret = execute_cd(args[1]);
+            ret_val = execute_cd(args[1]);
             break;
         case 3:
-           ret = execute_sls();
+           ret_val = execute_sls();
             break;
         default:
-            ret = 0;
+            ret_val = 0;
             break;
     }
-
-    return ret;
+    return ret_val;
 }
 char *read_cmd(void){
         // memory allocation
@@ -125,10 +122,11 @@ void assign_token(struct parsed_token *p_tokens, char *p_tok){
         p_tokens->tok=p_tok;
 }
 
-char **parse_cmd(char *cmd){ //struct parsed_token *p_tokens, 
+char **parse_cmd(char *cmd, int* size){ //struct parsed_token *p_tokens, 
         // memory allocation
         char *s_token;
         char **token = malloc(sizeof(char*) * TOKEN_MAX);
+        int size_tokens = 0;
         if(!token){
                 //fprintf(stderr, "ERROR: malloc");
                 perror("ERROR: malloc");
@@ -153,8 +151,10 @@ char **parse_cmd(char *cmd){ //struct parsed_token *p_tokens,
                 token[pointer] = s_token;
                 pointer++;
                 s_token = strtok(NULL, " \t\r\n");
+                size_tokens++;
         }
         token[pointer] = NULL;
+        *size = size_tokens;
         return token;
 }
 
@@ -173,13 +173,13 @@ int execute_cmd(char **args){
                 return EXIT_FAILURE;
         }
         if(!strcmp(args[0], "pwd")) {
-            built_cmd = 1;
+            built_cmd = pwd_cmd;
         }
         if(!strcmp(args[0], "cd")) {
-            built_cmd = 2;   
+            built_cmd = cd_cmd;   
         }
         if(!strcmp(args[0], "sls")) {
-            built_cmd = 3; 
+            built_cmd = sls_cmd; 
         }
         if(built_cmd != -1) {
             return execute_builtin_commands(args,built_cmd);
@@ -217,16 +217,73 @@ int execute_cmd(char **args){
 //
 //} (A | B ) = (A' | C)
 
+int output_redirection(char** args, int cmd_pos) {
+        char* path = malloc(sizeof(char) * PATH_MAX);
+        char** new_args = malloc(sizeof(char*) * TOKEN_MAX);
+        char program_name[strlen(args[0])-2];
+        int fd = 0, ret = 0;
+
+        /*Open file with appropriate macro*/
+        if(strlen(args[cmd_pos]) > 1)
+                fd = open(args[cmd_pos+1], O_RDWR|O_CREAT|O_APPEND, 0600);
+        else
+                fd = open(args[cmd_pos+1], O_RDWR| O_CREAT | O_TRUNC, 0600);
+
+        if (fd == -1) {
+                perror("Error: Cannot open file");
+                return 1;
+        }
+
+        /* Redirect output & execute command */
+        int std_out = dup(STDOUT_FILENO);
+        if(dup2(fd, STDOUT_FILENO) == -1) {
+                perror("Error: Cannot redirect output");
+                ret = 1;
+                return ret;
+        }
+        if(strstr(args[0],"./") != NULL) { //Check if executable isnt a regular command and find the path to it
+                char* cmd = args[0];
+                unsigned long j = 0;
+                for(unsigned long s = 2; s  < strlen(args[0]); s++) {
+                        program_name[j] = cmd[s];
+                        j++;
+                }
+                program_name[j] = '\0';
+                realpath(program_name, path);
+                new_args[0] = path;
+                ret = execute_cmd(new_args);
+        }
+        else {
+                int j = 0;
+                for(int l = 0; l < cmd_pos; l++) {
+                        new_args[j] = args[l];
+                                j++;
+                }
+                ret = execute_cmd(new_args);
+        }
+        
+        /* return everything to normal and free memory*/
+        fflush(stdout); 
+        dup2(std_out, STDOUT_FILENO);
+        close(fd);
+        close(std_out);
+        free(new_args);
+        free(path);
+
+        return ret;
+}
 int main(void) 
 {
         //char cmd[CMDLINE_MAX]; 
         //struct parsed_token *p_tokens = NULL;
         char *cmd; 
         char **token;
-        
         while (1) {
                 //char *nl;
                 int retval;
+                int output_red = 0;
+                int size;
+
 
                 /* Print prompt */
                 printf("sshell$ ");
@@ -252,10 +309,22 @@ int main(void)
                 //retval = system(cmd);
                 
 
-                token = parse_cmd(cmd); //p_tokens
-                retval = execute_cmd(token); // system(cmd);
 
-                if(retval==0)
+                token = parse_cmd(cmd,&size); //p_tokens
+                int cmd_pos;
+                for( cmd_pos = 0; cmd_pos < size; cmd_pos++) {
+                        if(strstr(token[cmd_pos],">") != NULL) {
+                                output_red = 1;
+                                break;
+                        }
+                }
+                
+                if(output_red == 1)
+                        retval = output_redirection(token,cmd_pos);
+                else
+                        retval = execute_cmd(token); // system(cmd);
+
+                if(retval == 0)
                         fprintf(stderr, "+ completed '%s' [%d]\n",
                         cmd, retval);
                 else
