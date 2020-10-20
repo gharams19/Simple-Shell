@@ -11,6 +11,12 @@
 #define PATH_MAX 4096 
 #define TOKEN_MAX 32
 
+// 1. Fix the bug in multiple pipes -> fprintf(stderr, concataenate the argumetns and exit values) - 10/20
+// 2. Fix the completed - for loops - 10/20
+// 3. Running tester.sh & Test it on sshell.ref & Based on instruction - 10/21
+// 4. Clean the code according coding style - consistency , keep small sniphet of comments , check the coding style - 10/21
+// 5. Finalize it - 10/22
+
 enum {exit_cmd = 0, pwd_cmd = 1, cd_cmd = 2, sls_cmd = 3};
 //enum {READ = 0, WRITE = 1};
 
@@ -213,6 +219,7 @@ int execute_pipe(struct commands *obj, int pipe_count){
 }
 */
 
+// No need to associate with built in commands and output redirection
 int execute_pipe(struct commands *obj){
         int fd[2];
         pid_t pid;
@@ -300,6 +307,7 @@ int main(void)
 {
         char *cmd; 
         char **token;
+        
         struct commands command;
         
         while (1) {
@@ -311,9 +319,10 @@ int main(void)
                 printf("sshell$ ");
                 fflush(stdout);
 
-                cmd = read_cmd();
+                cmd = read_cmd();   
                 token = parse_cmd(&command, cmd, &size);
-                //printf("debug\n");
+                //printf("debug\n"); 
+                // **arguments = {{echo, hello, '\0'}, {cd  test}}
                 int cmd_pos;
                 char *pipe_dilimiter = "|";
                 for(cmd_pos = 0; cmd_pos < size; cmd_pos++){
@@ -323,9 +332,9 @@ int main(void)
                         }
                 } 
                 //printf("debug\n");
-                //int i;
-                //for(i=0;i<size;i++)
-                //        printf("%s\n", command.arguments[i]);
+                int i;
+                for(i=0;i<size;i++)
+                        printf("%s\n", command.arguments[i]);
                 
                 if(pipe_count)
                         retval = execute_pipe(&command);
@@ -348,7 +357,7 @@ int main(void)
                 
                 if(retval == 0)
                         fprintf(stderr, "+ completed '%s' [%d]\n", // will need to print out entire cmd
-                        &cmd[0], retval);
+                        cmd, retval);
                 else if(retval == -1)
                         break;
                 else
