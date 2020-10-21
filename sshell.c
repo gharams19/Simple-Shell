@@ -10,14 +10,18 @@
 #define CMDLINE_MAX 512
 #define PATH_MAX 4096 
 #define TOKEN_MAX 32
+#define PIPE_ARG_MAX 4
 
 // 1. Fix the bug in multiple pipes -> fprintf(stderr, concataenate the argumetns and exit values) - 10/20
-// 2. Fix the completed - for loops - 10/20
 // 3. Running tester.sh & Test it on sshell.ref & Based on instruction - 10/21
 // 4. Clean the code according coding style - consistency , keep small sniphet of comments , check the coding style - 10/21
 // 5. Finalize it - 10/22
 
 enum {exit_cmd = 0, pwd_cmd = 1, cd_cmd = 2, sls_cmd = 3};
+
+struct commands{
+        char **arguments;
+};
 
 int execute_pwd() {
     char cwd[PATH_MAX];
@@ -82,33 +86,6 @@ int execute_builtin_commands(char** args, int cmd_num){
     return ret_val;
 }
 
-struct commands{
-        char **arguments;
-};
-
-char *read_cmd(void){
-        char *cmd = malloc(sizeof(char) * CMDLINE_MAX);  
-        if(!cmd){
-                perror("ERROR: Malloc");
-                exit(EXIT_FAILURE);
-        }
-
-        int offset;
-        do{
-                offset = read(STDIN_FILENO, cmd, CMDLINE_MAX);
-                if (!isatty(STDIN_FILENO)) { 
-                        printf("%s", cmd);
-                        fflush(stdout);
-                }
-                if(offset == -1) 
-                        exit(EXIT_FAILURE);
-        
-                cmd[offset] = '\0';
-
-                return cmd;
-        }while(1);
-}
-
 char **parse_cmd(struct commands *obj, char *cmd, int* size){
         char *s_token;
         char **token = malloc(sizeof(char*) * TOKEN_MAX);
@@ -141,7 +118,7 @@ int execute_cmd(char **args){
 
         if (!strcmp(args[0], "exit")) {  
                 fprintf(stderr, "Bye...\n");
-                free(args[0]);
+                //free(args[0]);
                 fprintf(stderr, "+ completed 'exit' [%d]\n",
                         0);
                 return -1;
@@ -181,46 +158,14 @@ int execute_cmd(char **args){
 
         return EXIT_SUCCESS;
 }
-/*
-int helper_pipe(int i_fd, int o_fd, struct commands *obj){
-        pid_t pid = 0;
-        if((pid == fork()) == 0){
-                if(i_fd != 0){
-                        dup2(i_fd, 0);
-                        close(i_fd);
-                }
 
-                if(o_fd != 1){
-                        dup2(o_fd, 1);
-                        close(o_fd);
-                }
-                return execvp(obj->arguments[0], (char * const *) obj->arguments);
-        }
-        return pid;
-}
-
-int execute_pipe(struct commands *obj, int pipe_count){
-        int fd[2];
-        int f_fd = 0;
-        int i = 0;
-        for (i = 0; i < pipe_count; i++){
-                pipe(fd);
-                helper_pipe(f_fd, fd[1], obj + i);
-                close(fd[1]);
-                f_fd = fd[0];
-        }
-        if(f_fd != 0)
-                dup2(f_fd, 0);
-        return execvp(obj->arguments[i], (char * const *)obj->arguments[i]);
-}
-*/
-
-// No need to associate with built in commands and output redirection
-int execute_pipe(struct commands *obj){
-        int fd[2];
+int *execute_pipe(struct commands *obj, int *size){
         pid_t pid;
+        int fd[2];
         int fd_in = 0;
-        int retval = 0;
+        static int exit_status[PIPE_ARG_MAX];
+        int exit_pos = 0;
+
         while (*obj->arguments != NULL) // to take multiple arguments
         {
                 pipe(fd);
@@ -232,7 +177,8 @@ int execute_pipe(struct commands *obj){
                         if (*(obj->arguments + 1) != NULL)
                                 dup2(fd[1], 1); // change the output to the std output
                         close(fd[0]);
-                        retval  = execvp((obj->arguments)[0], (char * const *) obj->arguments); // might need to recalle execute_cmd
+                        exit_status[exit_pos]  = execvp((obj->arguments)[0], (char * const *) obj->arguments); // might need to recalle execute_cmd
+                        exit_pos++;
                         exit(EXIT_FAILURE);
                 } 
                 else{
@@ -242,10 +188,10 @@ int execute_pipe(struct commands *obj){
                         obj->arguments++;
         }
     }
-
-        return retval;
+        *size = exit_pos;
+        
+        return exit_status;
 }
-
 
 int output_redirection(char** args, int cmd_pos) {
         char* path = malloc(sizeof(char) * PATH_MAX);
@@ -261,7 +207,7 @@ int output_redirection(char** args, int cmd_pos) {
 
         if (fd == -1) {
                 perror("Error: Cannot open file");
-                
+
                 return 1;
         }
 
@@ -304,25 +250,43 @@ int output_redirection(char** args, int cmd_pos) {
 
         return ret;
 }
+
 int main(void) 
 {
         /* Variable Initiation */
-        char *cmd; 
+        char cmd[CMDLINE_MAX]; 
         char **token;
         struct commands command;
         
         while (1) {
                 int retval;
                 int size;
+                int size_exit;
                 int output_red = 0;
                 int pipe_count = 0;
+                char* nl;
 
                 /* Print Prompt */
                 printf("sshell$ ");
                 fflush(stdout);
 
-                /* Read in & Parse the commands */
-                cmd = read_cmd();   
+                /* Get command line */
+                fgets(cmd, CMDLINE_MAX, stdin);
+
+                /* Print command line if stdin is not provided by terminal */
+                if (!isatty(STDIN_FILENO)) {
+                        printf("%s", cmd);
+                        fflush(stdout);
+                }
+                char *print_cmd = strdup(cmd);
+                strtok(print_cmd, "\n");
+
+                /* Remove trailing newline from command line */
+                nl = strchr(cmd, '\n');
+                if (nl)
+                        *nl = '\0';
+
+                /* Parse the commands */
                 token = parse_cmd(&command, cmd, &size);
                 
                 /* Check whether Pipe or Output Redirection or Regular Command  */
@@ -333,6 +297,8 @@ int main(void)
                                 pipe_count++;
                                 *command.arguments[cmd_pos] = '\0'; 
                         }
+                        if((pipe_count) && (cmd_pos = size - 1))
+                                *command.arguments[cmd_pos] = '\0';
                 } 
 
                 cmd_pos = 0;
@@ -344,23 +310,32 @@ int main(void)
                 }
                 
                 /* Execute commands corresponding to the types */
+                int retpipe[PIPE_ARG_MAX]; 
                 if(pipe_count)
-                        retval = execute_pipe(&command);
+                        *retpipe = *execute_pipe(&command, &size_exit);
                 else if(output_red)
                         retval = output_redirection(token,cmd_pos);
                 else
                         retval = execute_cmd(token);
                 
-                
                 /* Decide action correspond to returned exit cod */
-                if(retval == 0)
-                        fprintf(stderr, "+ completed '%s' [%d]\n",   // will need to print out entire cmd
-                        cmd, retval);
+                if((!pipe_count) && (retval == 0) )
+                        fprintf(stderr, "+ completed '%s' [%d]\n", 
+                        print_cmd, retval);
+                else if((pipe_count) && (retval == 0)){
+                        fprintf(stderr, "+ completed '%s' ",   
+                        print_cmd);
+                        
+                        int i;
+                        for(i = 0; i < size_exit; i++)
+                                fprintf(stderr, "[%d]", 
+                                retpipe[i]);
+                        fprintf(stderr, "\n");
+                }
                 else if(retval == -1) // Other way to break?
                         break;
                 else
                         perror("Error: "); 
-
         }
 
         return EXIT_SUCCESS;
