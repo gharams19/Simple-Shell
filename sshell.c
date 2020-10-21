@@ -190,7 +190,6 @@ int *execute_pipe(struct commands *obj, int *size){
         }
     }
         *size = exit_pos;
-
         return exit_status;
 }
 
