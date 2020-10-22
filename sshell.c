@@ -63,7 +63,7 @@ char* skipwhite(char* s)
 	cmd = skipwhite(cmd);
 	char* next = strchr(cmd, ' ');
 	int i = 0;
- 
+ 	
 	while(next != NULL) {
 		next[0] = '\0';
 		args[i] = cmd;
@@ -71,11 +71,10 @@ char* skipwhite(char* s)
 		cmd = skipwhite(next + 1);
 		next = strchr(cmd, ' ');
 	}
- 
 	if (cmd[0] != '\0') {
 		args[i] = cmd;
 		next = strchr(cmd, '\n');
-		next[0] = '\0';
+		//next[0] = '\0';
 		++i; 
 	}
  
@@ -139,9 +138,9 @@ int execute_sls() {
                 depth++;
         }
     }
-    if(depth == 0) 
+    if(depth == 0) {
         fprintf(stdout,"empty (0 bytes)\n");
-
+    }
         closedir(dirp);
         return ret_val;
 }
@@ -195,7 +194,7 @@ char **parse_cmd(struct commands *obj, char *cmd, int* size){
                 size_tokens++;
         }
 
-        token[pointer] = "\0"; //  "\0": string literal holding '\0' plus second one as a terminator
+        token[pointer] = NULL; //  "\0": string literal holding '\0' plus second one as a terminator
         obj->arguments = token;
         *size = size_tokens;
  
@@ -433,7 +432,7 @@ int output_redirection(char** args, int cmd_pos, int size) {
                 perror("ERROR: Malloc");
                 exit(EXIT_FAILURE);
         }
-        if(args[cmd_pos+2] == NULL) {
+        if(args[cmd_pos+1] == NULL) {
                 fprintf(stderr,"Error: no output file\n");
                 return 2;
         }
@@ -501,7 +500,7 @@ int main(void)
         struct commands command;
         
         while (1) {
-                int retval;
+                int retval = 0;
                 int size;
                 //int size_exit;
                 int output_red = 0;
@@ -590,7 +589,7 @@ int main(void)
                         
                         //*retpipe = *execute_pipe(pipe_cmds, &size_exit, pipe_count);
                 }
-                if(output_red)
+                else if(output_red)
                         retval = output_redirection(token,cmd_pos,size);
                 else
                         retval = execute_cmd(token);
