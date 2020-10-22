@@ -12,12 +12,15 @@
 #define TOKEN_MAX 32
 #define PIPE_ARG_MAX 4
 #define MAX_ARGS 16
+#define READ 0
+#define WRITE 1
 // 1. Fix the bug in multiple pipes -> fprintf(stderr, concataenate the argumetns and exit values) - 10/20
 // 3. Running tester.sh & Test it on sshell.ref & Based on instruction - 10/21
 // 4. Clean the code according coding style - consistency , keep small sniphet of comments , check the coding style - 10/21
 // 5. Finalize it - 10/22
 
 enum {exit_cmd = 0, pwd_cmd = 1, cd_cmd = 2, sls_cmd = 3};
+
 
 int execute_pwd() {
     char cwd[PATH_MAX];
@@ -92,6 +95,10 @@ int execute_builtin_commands(char** args, int cmd_num){
 
 struct commands{
         char **arguments;
+        char *arg1[TOKEN_MAX];
+        char *arg2[TOKEN_MAX];
+        char *arg3[TOKEN_MAX];
+        char *arg4[TOKEN_MAX];
 };
 
 char **parse_cmd(struct commands *obj, char *cmd, int* size){
@@ -108,6 +115,7 @@ char **parse_cmd(struct commands *obj, char *cmd, int* size){
         s_token = strtok(cmd, " \t\r\n"); 
         while(s_token != NULL){
                 token[pointer] = s_token;
+                
                 pointer++;
                 s_token = strtok(NULL, " \t\r\n");
                 size_tokens++;
@@ -178,78 +186,90 @@ int execute_cmd(char **args){
         return EXIT_SUCCESS;
 }
 
-void helper_pipe(char ***pipe, struct commands *obj, int size){
-        // char** arg1 = malloc(sizeof(char*) * TOKEN_MAX);
-        char *arg1[TOKEN_MAX];
-        char *arg2[TOKEN_MAX];
-        char *arg3[TOKEN_MAX];
-        char *arg4[TOKEN_MAX];
-        int divider = 0;
-        int arg_pos = 0;
-        int cmd_pos;
+void helper_pipe(char ***pipe, char *piping_cmd, struct commands *pip){
+        char *s_token;
+        char **token = malloc(sizeof(char*) * TOKEN_MAX);
         
-        for(cmd_pos = 0; cmd_pos < size; cmd_pos++){
-                if(divider == 0)
-                {
-                        arg1[arg_pos++] = obj->arguments[cmd_pos];
-                        arg_pos++;
-                }
-                if(divider == 1)
-                {
-                        arg2[arg_pos] = obj->arguments[cmd_pos];
-                        arg_pos++;
-                }
-
-                if(divider == 2)
-                {
-                        arg3[arg_pos] = obj->arguments[cmd_pos];
-                        arg_pos++;
-                }
-                if(divider == 3)
-                {
-                        arg4[arg_pos] = obj->arguments[cmd_pos];
-                        arg_pos++;
-                }   
-                if(obj->arguments[cmd_pos] == NULL){
-                        divider++;
-                        arg_pos = 0;
-                }
+        if(!token){
+                perror("ERROR: Malloc");
+                exit(EXIT_FAILURE);
         }
-        char **pipe_cmds[] = {arg1, arg2, arg3, arg4, NULL};
-        pipe = pipe_cmds;
+
+        int pointer = 0;
+        s_token = strtok(piping_cmd, " \t\r\n"); 
+        while(s_token != NULL){
+                token[pointer] = s_token;
+                pointer++;
+                s_token = strtok(NULL, " \t\r\n");
+        }
+        token[pointer++] = "\0"; //  "\0": string literal holding '\0' plus second one as a terminator
+        pip->arguments = token;
+        
+
+        pointer = 0;
+        char *p_token;
+        char **temp_token = malloc(sizeof(char*) * TOKEN_MAX);
+        int check = 0;
+        p_token = strtok(*pip->arguments, "|");
+        while(p_token != NULL){
+                temp_token[pointer] = p_token;
+                if(check == 0){
+                        *pip->arg1 = *temp_token;
+                        check++;
+                } else if(check == 1){
+                        *pip->arg1 = *temp_token;
+                        check++;
+                } else if(check == 2){
+                        *pip->arg1 = *temp_token;
+                        check++;
+                } else if(check == 3){
+                        *pip->arg1 = *temp_token;
+                        check++;
+                }
+                pointer++;
+                p_token = strtok(NULL, "|");
+        }
+        temp_token[pointer++] = "\0";
+        
+        char **temp_pipe[] = {pip->arg1, pip->arg2, pip->arg3, pip->arg4, NULL};
+        pipe = temp_pipe;
  }
 
 int *execute_pipe(char ***obj, int *size){
         /* Collect child exit status */
         static int exit_status[PIPE_ARG_MAX];
         int exit_pos = 0;
-        pid_t pid;
+        pid_t childpid;
         int fd[2];
         int fd_in = 0;
         while (*obj != NULL) 
         {
                 pipe(fd);
-                if ((pid = fork()) == -1){
-                        exit(EXIT_FAILURE);
+                /* fork() error occurred */
+                if ((childpid = fork()) == -1)
+                {
+                        perror("fork");
+                        exit_status[exit_pos] = EXIT_FAILURE; 
+                        exit_pos++;
                 }
-                
-                else if (pid == 0){ 
-                        dup2(fd_in, 0); 
+                else if (childpid == 0)
+                { 
+                        dup2(fd_in, READ); 
                         if (*(obj + 1) != NULL)
-                                dup2(fd[1], 1); 
+                                dup2(fd[1], WRITE); 
                         close(fd[0]);
                         exit_status[exit_pos]  = execvp((*obj)[0], *obj); 
                         exit_pos++;
                         exit(EXIT_FAILURE);
                 } 
-                else{
+                else
+                {
                         wait(NULL);
                         close(fd[1]);
                         fd_in = fd[0]; 
                         obj++;
                 }
         }
-
         *size = exit_pos;
         return exit_status;
 }
@@ -326,6 +346,7 @@ int main(void)
         /* Variable Initiation */
         char cmd[CMDLINE_MAX]; 
         char **token;
+        char *piping_cmd;
         char *print_cmd;
         struct commands command;
         
@@ -349,6 +370,8 @@ int main(void)
                         printf("%s", cmd);
                         fflush(stdout);
                 }
+                piping_cmd = strdup(cmd);
+                strtok(piping_cmd, "\n");
                 print_cmd = strdup(cmd);
                 strtok(print_cmd, "\n");
 
@@ -393,10 +416,11 @@ int main(void)
 
                 /* Execute commands corresponding to the types */
                 int retpipe[PIPE_ARG_MAX]; 
+                struct commands pip;
                 if(pipe_count){
                         char **pipe_cmds[TOKEN_MAX];
                         
-                        helper_pipe(pipe_cmds, &command, size);
+                        helper_pipe(pipe_cmds, piping_cmd, &pip);
                         
                         *retpipe = *execute_pipe(pipe_cmds, &size_exit);
                 }
