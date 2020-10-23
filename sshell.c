@@ -51,7 +51,6 @@ int execute_sls() {
 
     if(dirp == NULL) {
         fprintf(stderr, "Error: cannot open directory\n");
-
         return 1;
     }
     
@@ -60,12 +59,13 @@ int execute_sls() {
         if(dp->d_name[0] != '.') {
                 stat(dp->d_name, &sb);
                 fprintf(stdout, "%s (%ld bytes)\n", dp->d_name, sb.st_size);
+                
                 depth++;
         }
     }
-    if(depth == 0) 
+    if(depth == 0) {
         fprintf(stdout,"empty (0 bytes)\n");
-
+    }
         closedir(dirp);
         return ret_val;
 }
